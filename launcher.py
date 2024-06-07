@@ -5,19 +5,21 @@ import subprocess
 import sys
 import threading
 from tkinter import Tk, Label, Image
+import warnings
 
 import requests
 from PIL import Image, ImageEnhance, ImageTk
 
 import customtkinter
 
-customtkinter.FontManager.load_font("crash-a-like.ttf")
+warnings.filterwarnings('ignore')
 
-LAUNCHER_VERSION = "1.0"
+LAUNCHER_VERSION = "1.1"
 URL_VERSION = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/version"
 URL_CLIENT = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_CTRClient/Client.exe"
 URL_XDELTA_30 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online30.xdelta"
 URL_XDELTA_60 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online60.xdelta"
+
 
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(os.path.realpath(sys.executable))
@@ -182,11 +184,13 @@ class GameLauncher:
                     output = output.decode('utf-8', errors='replace').strip()
                     # Trying to make the logs look better ¯\_(ツ)_/¯
                     output = re.sub(r'[^a-zA-Z0-9: "().@]', '', output)
+                        
                     self.gui.logs_text.after(0, self.gui.logs_text.insert, "end", output + "\n")
                     self.gui.logs_text.see("end")
         except Exception as e:
             self.print_logs("Error launching CTRClient")
             self.print_logs(str(e))
+
 
 class CTkImage(ImageTk.PhotoImage):
     def __init__(self, image=None, **kwargs):
@@ -196,12 +200,13 @@ class CTkImage(ImageTk.PhotoImage):
     def __getattr__(self, name):
         return getattr(self._image, name)
 
+
 class GameLauncherGUI(customtkinter.CTk):
     def __init__(self, game_launcher):
         super().__init__()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        self.iconpath = CTkImage(file='assets\\icon.png')
+        self.iconpath = CTkImage(file='assets\\icon.ico')
         self.wm_iconbitmap()
         self.iconphoto(False, self.iconpath)
 
@@ -237,7 +242,7 @@ class GameLauncherGUI(customtkinter.CTk):
         
         
         #Launch Button
-        self.game_launcher_button = customtkinter.CTkButton(self, text="Launch Game", font=("crash-a-like", 30),
+        self.game_launcher_button = customtkinter.CTkButton(self, text="Launch Game", font=("", 30),
                                                 fg_color="#951A02", hover_color="#FFC432", border_color="#EE6518",
                                                 border_width=2, width=150, height=50,
                                                 command=game_launcher.launch_game)
