@@ -14,10 +14,10 @@ import customtkinter
 customtkinter.FontManager.load_font("crash-a-like.ttf")
 
 LAUNCHER_VERSION = "1.0"
-URL_VERSION = "https://github.com/xlenore/CTROnline_Launcher/raw/main/version"
-URL_CLIENT = "https://github.com/xlenore/CTROnline_Launcher/raw/main/_CTRClient/Client.exe"
-URL_XDELTA_30 = "https://github.com/xlenore/CTROnline_Launcher/raw/main/_XDELTA/ctr-u_Online30.xdelta"
-URL_XDELTA_60 = "https://github.com/xlenore/CTROnline_Launcher/raw/main/_XDELTA/ctr-u_Online60.xdelta"
+URL_VERSION = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/version"
+URL_CLIENT = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_CTRClient/Client.exe"
+URL_XDELTA_30 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online30.xdelta"
+URL_XDELTA_60 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online60.xdelta"
 
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(os.path.realpath(sys.executable))
@@ -198,7 +198,7 @@ class GameLauncherGUI(customtkinter.CTk):
         self.wm_iconbitmap()
         self.iconphoto(False, self.iconpath)
 
-        self.title(f"CTR Online Game Launcher [UNOFFICIAL] | v{LAUNCHER_VERSION}")
+        self.title(f"OnlineCTR Launcher [UNOFFICIAL] | v{LAUNCHER_VERSION}")
         self.geometry("800x350")
         self.resizable(False, False)
         self.game_launcher = game_launcher
@@ -250,5 +250,5 @@ game_launcher = GameLauncher(root_folder, game_launcher_gui, settings)
 game_launcher_gui.game_launcher = game_launcher
 
 game_launcher_gui.create_widgets()
-game_launcher_gui.logs_text.after(0, game_launcher_gui.logs_text.insert, "end", "CTROnline Launcher by: xlenore\n")
+game_launcher_gui.logs_text.after(0, game_launcher_gui.logs_text.insert, "end", "OnlineCTR Launcher by: xlenore\n")
 game_launcher_gui.mainloop()
