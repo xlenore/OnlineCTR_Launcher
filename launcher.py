@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import threading
+import tkinter
 
 import requests
 from PIL import Image, ImageEnhance, ImageTk
@@ -31,8 +32,8 @@ class LauncherSettings:
         self.name = self.config["SETTINGS"]["name"]
         self.game_mode = self.config["SETTINGS"]["game_mode"]
         self.duckstation = self.config["PATHS"]["duckstation"]
-            
-            
+
+
 class GameLauncher:
     def __init__(self, root_folder, gui, settings):
         self.root_folder = root_folder
@@ -191,7 +192,7 @@ class GameLauncher:
 class GameLauncherGUI(customtkinter.CTk):
     def __init__(self, game_launcher):
         super().__init__()
-        
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.iconpath = ImageTk.PhotoImage(file='assets\\icon.png')
         self.wm_iconbitmap()
@@ -202,7 +203,12 @@ class GameLauncherGUI(customtkinter.CTk):
         self.resizable(False, False)
         self.game_launcher = game_launcher
         
-
+    def on_close(self):
+        os.system("taskkill /f /im Client.exe")
+        os.system("taskkill /f /im duckstation-qt-x64-ReleaseLTCG.exe")
+        self.destroy()
+        sys.exit(0)
+    
     def create_widgets(self):
         #Background
         current_path = os.path.dirname(os.path.realpath(__file__))
