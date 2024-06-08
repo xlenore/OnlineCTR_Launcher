@@ -6,6 +6,7 @@ import sys
 import threading
 from tkinter import Tk, Label, Image
 import warnings
+import psutil
 
 import requests
 from PIL import Image, ImageEnhance, ImageTk
@@ -14,7 +15,7 @@ import customtkinter
 
 warnings.filterwarnings('ignore')
 
-LAUNCHER_VERSION = "1.1"
+LAUNCHER_VERSION = "1.2"
 URL_VERSION = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/version"
 URL_CLIENT = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_CTRClient/Client.exe"
 URL_XDELTA_30 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online30.xdelta"
@@ -25,15 +26,44 @@ if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(os.path.realpath(sys.executable))
 elif __file__:
     application_path = os.path.dirname(__file__)
-    
+
+#Kill launcher.exe if already running
+current_pid = os.getpid()
+for proc in psutil.process_iter(['pid', 'name']):
+    if proc.info['name'] == 'launcher.exe' and proc.info['pid'] != current_pid:
+        proc.kill()
+
 
 class LauncherSettings:
     def __init__(self):
         self.config = configparser.ConfigParser(inline_comment_prefixes=";")
-        self.config.read("settings.ini")
-        self.name = self.config["SETTINGS"]["name"]
-        self.game_mode = self.config["SETTINGS"]["game_mode"]
-        self.duckstation = self.config["PATHS"]["duckstation"]
+        try:
+            self.config.read("settings.ini")
+            self.name = self.config["SETTINGS"]["name"].strip('"')
+            self.game_mode = self.config["SETTINGS"]["game_mode"].strip('"')
+            self.duckstation = self.config["PATHS"]["duckstation"].strip('"')
+            self.fullscreen = self.config["SETTINGS"]["fullscreen"].strip('"')
+            self.fast_boot = self.config["SETTINGS"]["fast_boot"].strip('"')
+        except Exception as e:
+            self.name = "YourName"
+            self.game_mode = "0"
+            self.duckstation = r"C:\Users\[yourUserName]\[remaining path to duckstation folder]\duckstation-qt-x64-ReleaseLTCG.exe"
+            self.fullscreen = "0"
+            self.fast_boot = "0"
+            self.save_settings()
+            
+    def save_settings(self):
+        self.config["SETTINGS"] = {
+            "name": f'"{self.name}" ; Your name in the game',
+            "game_mode": f'{self.game_mode} ; 0 = 30fps, 1 = 60fps',
+            "fullscreen": f'{self.fullscreen} ; 0 = disabled, 1 = enabled',
+            "fastboot": f'{self.fast_boot} ; 0 = disabled, 1 = enabled'
+        }
+        self.config["PATHS"] = {
+            "duckstation": f'"{self.duckstation}"'
+        }
+        with open("settings.ini", "w") as file:
+            self.config.write(file)
 
 
 class GameLauncher:
@@ -42,11 +72,13 @@ class GameLauncher:
         self.xdelta_path = os.path.join(root_folder, "_XDELTA", "xdelta3.exe")
         self.xdelta60_file = "ctr-u_Online60.xdelta"
         self.xdelta30_file = "ctr-u_Online30.xdelta"
-        self.rom_file = os.path.join(root_folder, "_ROM", "CTR.bin")
-        self.patched60_file = os.path.join(root_folder, "_ROM", "CTR_Online60.bin")
-        self.patched30_file = os.path.join(root_folder, "_ROM", "CTR_Online30.bin")
-        self.client = os.path.join(root_folder, "_CTRClient", "Client.exe")
-        self.duckstation = settings.duckstation
+        self.rom_file_path = os.path.join(root_folder, "_ROM", "CTR.bin")
+        self.patched60_file_path = os.path.join(root_folder, "_ROM", "CTR_Online60.bin")
+        self.patched30_file_path = os.path.join(root_folder, "_ROM", "CTR_Online30.bin")
+        self.client_path = os.path.join(root_folder, "_CTRClient", "Client.exe")
+        self.fast_boot = settings.fast_boot
+        self.fullscreen = settings.fullscreen
+        self.duckstation_path = settings.duckstation
         self.game_mode = settings.game_mode
         self.name = settings.name
         self.gui = gui
@@ -54,10 +86,10 @@ class GameLauncher:
 
         if int(self.game_mode) == 0:
             self.xdelta_file = self.xdelta30_file
-            self.patched_file = self.patched30_file
+            self.patched_file = self.patched30_file_path
         elif int(self.game_mode) == 1:
             self.xdelta_file = self.xdelta60_file
-            self.patched_file = self.patched60_file
+            self.patched_file = self.patched60_file_path
 
 
     def print_logs(self, text):
@@ -70,7 +102,7 @@ class GameLauncher:
         if os.path.exists(self.patched_file):
             os.remove(self.patched_file)
         xdelta_file_path = os.path.join(self.root_folder, "_XDELTA", self.xdelta_file)
-        command = f'"{self.xdelta_path}" -d -s "{self.rom_file}" "{xdelta_file_path}" "{self.patched_file}"'
+        command = f'"{self.xdelta_path}" -d -s "{self.rom_file_path}" "{xdelta_file_path}" "{self.patched_file}"'
         subprocess.run(command, shell=True)
         
         
@@ -127,7 +159,7 @@ class GameLauncher:
     def launch_duckstation(self):
         try:
             if os.path.exists(os.path.join(root_folder, self.patched_file)):
-                process = f'start "" {self.duckstation} {self.patched_file}'
+                process = f'start "" {self.duckstation_path} {self.patched_file}{" -fullscreen" if self.fullscreen == "1" else ""}{" -fastboot" if self.fast_boot == "1" else ""}'
                 subprocess.Popen(process, shell=True)
             else:
                 self.print_logs("Patched game not found")
@@ -142,7 +174,29 @@ class GameLauncher:
             return False
 
 
+    def check_for_files(self):
+        if not os.path.exists(self.xdelta_path):
+            self.print_logs("xdelta3.exe not found")
+            return False
+        if not os.path.exists(self.client_path):
+            self.print_logs("Client.exe not found")
+            return False
+        if not os.path.exists(self.duckstation_path):
+            print(self.duckstation_path)
+            self.print_logs("DuckStation not found, please check your settings.ini")
+            return False
+        if not os.path.exists(self.rom_file_path):
+            self.print_logs("CTR.bin not found, please check your _ROM folder")
+            return False
+        return True
+    
+    
     def launch_game(self):
+        #Check for files
+        if not self.check_for_files():
+            self.print_logs("Some files are missing, please check if your antivirus deleted them...")
+            return
+        
         is_update = self.check_for_updates()
         if is_update:
             self.download_updated_files()
@@ -171,8 +225,7 @@ class GameLauncher:
             command1 = 'timeout /t 5 /nobreak > NUL'
             
             netname = os.environ['netname'].strip()
-            command2 = 'echo ' + netname + ' | ' + self.client
-    
+            command2 = 'echo ' + netname + ' | "' + self.client_path + '"'
             subprocess.call(command1, shell=True)
     
             process = subprocess.Popen(command2, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
@@ -214,10 +267,14 @@ class GameLauncherGUI(customtkinter.CTk):
         self.geometry("800x350")
         self.resizable(False, False)
         self.game_launcher = game_launcher
-        
+    
+    def kill_process(self):
+        for proc in psutil.process_iter(['pid', 'name']):
+            if proc.info['name'] in ['Client.exe', 'duckstation-qt-x64-ReleaseLTCG.exe']:
+                proc.kill()
+    
     def on_close(self):
-        os.system("taskkill /f /im Client.exe")
-        os.system("taskkill /f /im duckstation-qt-x64-ReleaseLTCG.exe")
+        self.kill_process()
         self.destroy()
         sys.exit(0)
     
@@ -262,5 +319,4 @@ game_launcher = GameLauncher(root_folder, game_launcher_gui, settings)
 game_launcher_gui.game_launcher = game_launcher
 
 game_launcher_gui.create_widgets()
-game_launcher_gui.logs_text.after(0, game_launcher_gui.logs_text.insert, "end", "OnlineCTR Launcher by: xlenore\n")
 game_launcher_gui.mainloop()
