@@ -4,28 +4,33 @@ import re
 import subprocess
 import sys
 import threading
-from tkinter import Tk, Label, Image
 import warnings
 import psutil
-
 import requests
-from PIL import Image, ImageEnhance, ImageTk
+import shutil
+import zipfile
 
-import customtkinter
+
+from PyQt5.QtCore import Qt, QPoint, QSize, QThreadPool, QRunnable
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QLineEdit, QComboBox, QVBoxLayout, QWidget, QPushButton, QFileDialog, QTextEdit
+
 
 warnings.filterwarnings('ignore')
 
-LAUNCHER_VERSION = "1.2"
-URL_VERSION = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/version"
-URL_CLIENT = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_CTRClient/Client.exe"
-URL_XDELTA_30 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online30.xdelta"
-URL_XDELTA_60 = "https://github.com/xlenore/OnlineCTR_Launcher/raw/main/_XDELTA/ctr-u_Online60.xdelta"
+LAUNCHER_VERSION = "1.3 WIP"
+
+URL_CLIENT = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/client.zip"
+URL_XDELTA_30 = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/ctr-u_Online30.xdelta"
+URL_XDELTA_60 = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/ctr-u_Online60.xdelta"
+URL_CURRENT_VERSION = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/build.txt"
 
 
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(os.path.realpath(sys.executable))
 elif __file__:
     application_path = os.path.dirname(__file__)
+
 
 #Kill launcher.exe if already running
 current_pid = os.getpid()
@@ -40,14 +45,16 @@ class LauncherSettings:
         try:
             self.config.read("settings.ini")
             self.name = self.config["SETTINGS"]["name"].strip('"')
-            self.game_mode = self.config["SETTINGS"]["game_mode"].strip('"')
+            self.frame_rate = self.config["SETTINGS"]["frame_rate"].strip('"')
             self.duckstation = self.config["PATHS"]["duckstation"].strip('"')
+            self.game_rom = self.config["PATHS"]["game_rom"].strip('"')
             self.fullscreen = self.config["SETTINGS"]["fullscreen"].strip('"')
             self.fast_boot = self.config["SETTINGS"]["fast_boot"].strip('"')
         except Exception as e:
             self.name = "YourName"
-            self.game_mode = "0"
+            self.frame_rate = "0"
             self.duckstation = r"C:\Users\[yourUserName]\[remaining path to duckstation folder]\duckstation-qt-x64-ReleaseLTCG.exe"
+            self.game_rom = r"C:\Users\[yourUserName]\[remaining path to game rom]\CTR.bin"
             self.fullscreen = "0"
             self.fast_boot = "0"
             self.save_settings()
@@ -55,15 +62,34 @@ class LauncherSettings:
     def save_settings(self):
         self.config["SETTINGS"] = {
             "name": f'"{self.name}" ; Your name in the game',
-            "game_mode": f'{self.game_mode} ; 0 = 30fps, 1 = 60fps',
+            "frame_rate": f'{self.frame_rate} ; 0 = 30fps, 1 = 60fps',
             "fullscreen": f'{self.fullscreen} ; 0 = disabled, 1 = enabled',
-            "fastboot": f'{self.fast_boot} ; 0 = disabled, 1 = enabled'
+            "fast_boot": f'{self.fast_boot} ; 0 = disabled, 1 = enabled'
         }
         self.config["PATHS"] = {
-            "duckstation": f'"{self.duckstation}"'
+            "duckstation": f'"{self.duckstation}"',
+            "game_rom": f'"{self.game_rom}"'
         }
         with open("settings.ini", "w") as file:
             self.config.write(file)
+    
+    def get_player_name(self):
+        return self.name
+
+    def get_frame_rate(self):
+        return self.frame_rate
+
+    def get_fast_boot(self):
+        return self.fast_boot
+
+    def get_fullscreen(self):
+        return self.fullscreen
+
+    def get_duckstation_path(self):
+        return self.duckstation
+
+    def get_game_rom_path(self):
+        return self.game_rom
 
 
 class GameLauncher:
@@ -72,38 +98,50 @@ class GameLauncher:
         self.xdelta_path = os.path.join(root_folder, "_XDELTA", "xdelta3.exe")
         self.xdelta60_file = "ctr-u_Online60.xdelta"
         self.xdelta30_file = "ctr-u_Online30.xdelta"
-        self.rom_file_path = os.path.join(root_folder, "_ROM", "CTR.bin")
+        self.rom_file_path = settings.game_rom  
+        #os.path.join(root_folder, "_ROM", "CTR.bin")
         self.patched60_file_path = os.path.join(root_folder, "_ROM", "CTR_Online60.bin")
         self.patched30_file_path = os.path.join(root_folder, "_ROM", "CTR_Online30.bin")
         self.client_path = os.path.join(root_folder, "_CTRClient", "Client.exe")
         self.fast_boot = settings.fast_boot
         self.fullscreen = settings.fullscreen
         self.duckstation_path = settings.duckstation
-        self.game_mode = settings.game_mode
+        self.frame_rate = settings.frame_rate
         self.name = settings.name
         self.gui = gui
         self.patched_file = None
 
-        if int(self.game_mode) == 0:
+        if int(self.frame_rate) == 0:
             self.xdelta_file = self.xdelta30_file
             self.patched_file = self.patched30_file_path
-        elif int(self.game_mode) == 1:
+        elif int(self.frame_rate) == 1:
             self.xdelta_file = self.xdelta60_file
             self.patched_file = self.patched60_file_path
 
 
-    def print_logs(self, text):
-        self.gui.logs_text.after(0, self.gui.logs_text.insert, "end", text + "\n")
-        self.gui.logs_text.see("end")
-        self.gui.update()
+    def print_logs(self, text, format=0):
+        # format 0 = normal; 1 = red
+        # I hope someone will make this better
+        if format == 0:
+            self.gui.logs_text.append(text.replace('\n', '<br>'))
+            self.gui.update()
+            
+        elif format == 1:
+            self.gui.logs_text.append("<div style=\"background-color: red; color:white\">{}</div>".format(text.replace('\n', '<br>')))
+            self.gui.update()
         
         
     def patch_game(self):
         if os.path.exists(self.patched_file):
             os.remove(self.patched_file)
-        xdelta_file_path = os.path.join(self.root_folder, "_XDELTA", self.xdelta_file)
-        command = f'"{self.xdelta_path}" -d -s "{self.rom_file_path}" "{xdelta_file_path}" "{self.patched_file}"'
-        subprocess.run(command, shell=True)
+        try:
+            xdelta_file_path = os.path.join(self.root_folder, "_XDELTA", self.xdelta_file)
+            command = f'"{self.xdelta_path}" -d -s "{self.rom_file_path}" "{xdelta_file_path}" "{self.patched_file}"'
+            subprocess.run(command, shell=True)
+            self.print_logs("Game patched successfully")
+        except Exception as e:
+            self.print_logs("Error patching the game", 1)
+            self.print_logs(str(e), 1)
         
         
     def get_local_version(self):
@@ -113,58 +151,91 @@ class GameLauncher:
                 return version
         except Exception as e:
             print(e)
-            return "1.0"
+            return "1"
         
     
-    def download_updated_files(self):
-        self.print_logs("Downloading updated files...")
+    def download_file(self, url, destination):
         try:
-            response = requests.get(URL_XDELTA_30)
-            with open("_XDELTA/ctr-u_Online30.xdelta", "wb") as file:
+            response = requests.get(url)
+            with open(destination, "wb") as file:
                 file.write(response.content)
-                
-            response = requests.get(URL_XDELTA_60)
-            with open("_XDELTA/ctr-u_Online60.xdelta", "wb") as file:
-                file.write(response.content)
-                
-            response = requests.get(URL_CLIENT)
-            with open("_CTRClient/Client.exe", "wb") as file:
-                file.write(response.content)
-                
-            response = requests.get(URL_VERSION)
-            with open("version", "w") as file:
-                file.write(response.text)
-                
         except Exception as e:
             print(e)
+    
+    
+    def download_and_extract_zip(self, url, extract_to, new_file_name):
+        temp_zip_path = "temp.zip"
+        self.download_file(url, temp_zip_path)
+    
+        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+            zip_ref.extractall("temp_folder")
+    
+        for root, dirs, files in os.walk("temp_folder"):
+            for file in files:
+                if file.endswith(".exe"):
+                    source_file_path = os.path.join(root, file)
+                    destination_file_path = os.path.join(extract_to, new_file_name)
+                    shutil.move(source_file_path, destination_file_path)
+    
+        os.remove(temp_zip_path)
+        shutil.rmtree("temp_folder")
+    
+    
+    def download_updated_files(self, version):
+        self.print_logs("Downloading updated files...")
+        self.print_logs("Downloading ctr-u_Online30.xdelta")
+        self.download_file(URL_XDELTA_30, "_XDELTA/ctr-u_Online30.xdelta")
+        self.print_logs("Downloading ctr-u_Online60.xdelta")
+        self.download_file(URL_XDELTA_60, "_XDELTA/ctr-u_Online60.xdelta")
+        self.print_logs("Downloading Client.exe")
+        self.download_and_extract_zip(URL_CLIENT, "_CTRClient", "Client.exe")
+    
+        try:
+            with open("version", "w") as file:
+                file.write(version)
+        except Exception as e:
+            print(e)
+    
+    
+    def get_current_patch(self):
+        url = URL_CURRENT_VERSION
+        response = requests.get(url)
+        if response.status_code == 200:
+            content = response.text
+            return content
+        else:
+            return "1"
     
     
     def check_for_updates(self):
         self.print_logs("Checking for updates...")
         try:
             local_version = self.get_local_version()
-            response = requests.get(URL_VERSION)
-            version = response.text
+            version = self.get_current_patch()
             if version != local_version:
                 self.print_logs(f"Local version: {local_version}\nGitHub version: {version}")
-                return True
+                return True, version
             else:
                 self.print_logs(f"Local version: {local_version}\nGitHub version: {version}")
-                return False
+                return False, None
         except Exception as e:
             print(e)
-            return False
+            return False, None
     
     
     def launch_duckstation(self):
         try:
-            if os.path.exists(os.path.join(root_folder, self.patched_file)):
+            if os.path.exists(self.patched_file):
                 process = f'start "" {self.duckstation_path} {self.patched_file}{" -fullscreen" if self.fullscreen == "1" else ""}{" -fastboot" if self.fast_boot == "1" else ""}'
                 subprocess.Popen(process, shell=True)
+                return True
             else:
-                self.print_logs("Patched game not found")
+                self.print_logs("Patched game not found\nTrying to patch the game...")
+                self.patch_game()
+                return False
         except Exception as e:
             print(e)
+            return False
 
 
     def check_for_patched_game(self):
@@ -174,32 +245,44 @@ class GameLauncher:
             return False
 
 
+    def get_news(self):
+        # TEST IGNORE THIS
+        url = "https://pastebin.com/raw/ARscS0et"
+        response = requests.get(url)
+        if response.status_code == 200:
+            content = response.text
+            self.print_logs(f"{content}/n")
+
+
     def check_for_files(self):
         if not os.path.exists(self.xdelta_path):
-            self.print_logs("xdelta3.exe not found")
+            self.print_logs("xdelta3.exe not found", 1)
             return False
         if not os.path.exists(self.client_path):
-            self.print_logs("Client.exe not found")
+            self.print_logs("Client.exe not found", 1)
             return False
         if not os.path.exists(self.duckstation_path):
             print(self.duckstation_path)
-            self.print_logs("DuckStation not found, please check your settings.ini")
+            self.print_logs("DuckStation not found, please check your settings.ini", 1)
             return False
         if not os.path.exists(self.rom_file_path):
-            self.print_logs("CTR.bin not found, please check your _ROM folder")
+            self.print_logs("CTR.bin not found, please check your _ROM folder", 1)
             return False
         return True
     
     
     def launch_game(self):
+        #self.get_news()
+        
         #Check for files
         if not self.check_for_files():
             self.print_logs("Some files are missing, please check if your antivirus deleted them...")
             return
         
-        is_update = self.check_for_updates()
+        is_update, version = self.check_for_updates()
+        print(is_update, version)
         if is_update:
-            self.download_updated_files()
+            self.download_updated_files(version)
             self.patch_game()
         else:
             self.print_logs("No updates found...")
@@ -210,7 +293,9 @@ class GameLauncher:
         
         #Launch DuckStation
         self.print_logs("Launching DuckStation...")
-        self.launch_duckstation()
+        if not self.launch_duckstation():
+            self.print_logs("Error launching DuckStation", 1)
+            return
         
         #Launch CTRClient
         self.print_logs("Launching CTRClient...")
@@ -238,85 +323,230 @@ class GameLauncher:
                     # Trying to make the logs look better ¯\_(ツ)_/¯
                     output = re.sub(r'[^a-zA-Z0-9: "().@]', '', output)
                         
-                    self.gui.logs_text.after(0, self.gui.logs_text.insert, "end", output + "\n")
-                    self.gui.logs_text.see("end")
+                    self.gui.logs_text.append(output)
         except Exception as e:
             self.print_logs("Error launching CTRClient")
             self.print_logs(str(e))
 
 
-class CTkImage(ImageTk.PhotoImage):
-    def __init__(self, image=None, **kwargs):
-        super().__init__(image, **kwargs)
-        self._image = image
+class MovableWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.m_drag = False
+        self.m_DragPosition = QPoint()
 
-    def __getattr__(self, name):
-        return getattr(self._image, name)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.m_drag = True
+            self.m_DragPosition = event.globalPos() - self.pos()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.LeftButton and self.m_drag:
+            self.move(event.globalPos() - self.m_DragPosition)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self.m_drag = False
 
 
-class GameLauncherGUI(customtkinter.CTk):
+class SettingsWindow(MovableWindow):
+    def __init__(self, launcher_settings):
+        super().__init__()
+        self.launcher_settings = launcher_settings
+        self.setWindowTitle("CTR Launcher Settings")
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        self.resize(300, 300)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowMaximizeButtonHint & ~Qt.WindowMinimizeButtonHint)
+        layout = QVBoxLayout(central_widget)
+
+        self.create_name_input(layout)
+        self.create_frame_rate_input(layout)
+        self.create_fast_boot_input(layout)
+        self.create_fullscreen_input(layout)
+        self.create_duckstation_input(layout)
+        self.create_game_rom_input(layout)
+        self.create_save_button(layout)
+
+    def create_name_input(self, layout):
+        self.name_label = QLabel("Player Name:")
+        self.name_input = QLineEdit()
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.name_input)
+        self.name_input.setText(self.launcher_settings.get_player_name())
+
+    def create_frame_rate_input(self, layout):
+        self.frame_rate_label = QLabel("Frame Rate:")
+        self.frame_rate_input = QComboBox()
+        self.frame_rate_input.addItem("30fps")
+        self.frame_rate_input.addItem("60fps")
+        layout.addWidget(self.frame_rate_label)
+        layout.addWidget(self.frame_rate_input)
+        if self.launcher_settings.get_frame_rate() == "0":
+            self.frame_rate_input.setCurrentIndex(0)
+        else:
+            self.frame_rate_input.setCurrentIndex(1)
+
+    def create_fast_boot_input(self, layout):
+        self.fast_boot_label = QLabel("Fast Boot:")
+        self.fast_boot_input = QComboBox()
+        self.fast_boot_input.addItem("Disabled")
+        self.fast_boot_input.addItem("Enabled")
+        layout.addWidget(self.fast_boot_label)
+        layout.addWidget(self.fast_boot_input)
+        if self.launcher_settings.get_fast_boot() == "0":
+            self.fast_boot_input.setCurrentIndex(0)
+        else:
+            self.fast_boot_input.setCurrentIndex(1)
+
+    def create_fullscreen_input(self, layout):
+        self.fullscreen_label = QLabel("Fullscreen:")
+        self.fullscreen_input = QComboBox()
+        self.fullscreen_input.addItem("Disabled")
+        self.fullscreen_input.addItem("Enabled")
+        layout.addWidget(self.fullscreen_label)
+        layout.addWidget(self.fullscreen_input)
+        if self.launcher_settings.get_fullscreen() == "0":
+            self.fullscreen_input.setCurrentIndex(0)
+        else:
+            self.fullscreen_input.setCurrentIndex(1)
+
+    def create_duckstation_input(self, layout):
+        self.duckstation_label = QLabel("Duckstation Path:")
+        self.duckstation_input = QLineEdit()
+        self.duckstation_button = QPushButton("Browse for Duckstation")
+        self.duckstation_button.clicked.connect(self.browse_duckstation)
+        layout.addWidget(self.duckstation_label)
+        layout.addWidget(self.duckstation_input)
+        layout.addWidget(self.duckstation_button)
+        self.duckstation_input.setDisabled(True)
+        self.duckstation_input.setText(self.launcher_settings.get_duckstation_path())
+
+    def create_game_rom_input(self, layout):
+        self.game_rom_label = QLabel("Game ROM Path:")
+        self.game_rom_input = QLineEdit()
+        self.game_rom_button = QPushButton("Browse for CTR ROM")
+        self.game_rom_button.clicked.connect(self.browse_game_rom)
+        layout.addWidget(self.game_rom_label)
+        layout.addWidget(self.game_rom_input)
+        layout.addWidget(self.game_rom_button)
+        self.game_rom_input.setDisabled(True)
+        self.game_rom_input.setText(self.launcher_settings.get_game_rom_path())
+
+    def create_save_button(self, layout):
+        layout.addSpacing(10)
+        save_button = QPushButton("Save and Close")
+        save_button.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 10px 24px; text-align: center; text-decoration: none; font-size: 16px; margin: 4px 2px;")
+        save_button.clicked.connect(self.save_settings)
+        layout.addWidget(save_button)
+
+    def save_settings(self):
+        self.launcher_settings.name = self.name_input.text()
+        self.launcher_settings.frame_rate = str(self.frame_rate_input.currentIndex())
+        self.launcher_settings.fast_boot = str(self.fast_boot_input.currentIndex())
+        self.launcher_settings.fullscreen = str(self.fullscreen_input.currentIndex())
+        self.launcher_settings.duckstation = self.duckstation_input.text()
+        self.launcher_settings.game_rom = self.game_rom_input.text()
+        self.launcher_settings.save_settings()
+        self.close()
+
+    def browse_duckstation(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Select Duckstation", filter="duckstation-qt-x64-ReleaseLTCG.exe")
+        if file:
+            self.duckstation_input.setText(file)
+
+    def browse_game_rom(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Select Game ROM", filter="*.bin")
+        if file:
+            self.game_rom_input.setText(file)
+
+
+class LauncherGameRunnable(QRunnable):
     def __init__(self, game_launcher):
         super().__init__()
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        self.iconpath = CTkImage(file='assets\\icon.ico')
-        self.wm_iconbitmap()
-        self.iconphoto(False, self.iconpath)
-
-        self.title(f"OnlineCTR Launcher [UNOFFICIAL] | v{LAUNCHER_VERSION}")
-        self.geometry("800x350")
-        self.resizable(False, False)
         self.game_launcher = game_launcher
-    
+
+    def run(self):
+        self.game_launcher.launch_game()        
+
+
+class LauncherGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.window = self.create_main_window()
+        self.logs_text = self.create_logs_textbox()
+        self.create_launch_button()
+        self.create_settings_button()
+        self.create_exit_button()
+
+    def create_main_window(self):
+        window = MovableWindow()
+        window.setAttribute(Qt.WA_TranslucentBackground, True)
+        window.setAttribute(Qt.WA_NoSystemBackground, True)
+        window.setWindowFlags(Qt.FramelessWindowHint)
+
+        label = QLabel(window)
+        pixmap = QPixmap('assets/launcher.png')
+        label.setPixmap(pixmap)
+        label.setGeometry(0, 0, pixmap.width(), pixmap.height())
+
+        window.label = label
+        window.resize(pixmap.width(), pixmap.height())
+
+        return window
+
+    def create_logs_textbox(self):
+        logs_textbox = QTextEdit(self.window)
+        logs_textbox.setGeometry(315, 70, 450, 260)
+        logs_textbox.setText(f"Launcher Version: {LAUNCHER_VERSION}\n")
+        logs_textbox.setReadOnly(True)
+        logs_textbox.setLineWrapMode(QTextEdit.WidgetWidth)
+        logs_textbox.setStyleSheet("background-color: black; color: white; font-family: Arial; font-size: 12px; border-radius: 10px; padding: 10px;")
+
+        return logs_textbox
+
+    def create_launch_button(self):
+        button_launch = QPushButton(self.window)
+        button_launch.setGeometry(50, 255, 190, 30)
+        button_launch.clicked.connect(self.launch_game_in_thread)
+
+    def create_settings_button(self):
+        button_settings = QPushButton(self.window)
+        button_settings.setGeometry(65, 300, 170, 30)
+
+        launcher_settings = LauncherSettings()
+        self.second_window = SettingsWindow(launcher_settings)
+        button_settings.clicked.connect(self.second_window.show)
+
+    def create_exit_button(self):
+        button_exit = QPushButton(self.window)
+        button_exit.setGeometry(80, 345, 140, 30)
+        button_exit.clicked.connect(self.close)
+
+    def launch_game_in_thread(self):
+        runnable = LauncherGameRunnable(GameLauncher(root_folder, self, settings))
+        QThreadPool.globalInstance().start(runnable)
+
+    def show(self):
+        self.window.show()
+
     def kill_process(self):
         for proc in psutil.process_iter(['pid', 'name']):
             if proc.info['name'] in ['Client.exe', 'duckstation-qt-x64-ReleaseLTCG.exe']:
                 proc.kill()
-    
-    def on_close(self):
+
+    def close(self):
         self.kill_process()
         self.destroy()
         sys.exit(0)
-    
-    def create_widgets(self):
-        #Background
-        background_path = "assets/background.png"
-        self.background_image = Image.open(background_path)
-        self.background_image = self.background_image.convert("RGBA")
-        self.background_image = self.background_image.resize((800, 350), Image.LANCZOS)
-
-        #Logo
-        logo_path = "assets/icon.png"
-        self.logo_image = Image.open(logo_path)
-        self.logo_image = self.logo_image.convert("RGBA")
-        self.logo_image = self.logo_image.resize((800, 350), Image.LANCZOS)
-
-        #Combine
-        self.combined_image = Image.alpha_composite(self.background_image, self.logo_image)
-        self.combined_image_tk = CTkImage(self.combined_image)
-        self.background_label = customtkinter.CTkLabel(self, image=self.combined_image_tk)
-        self.background_label.place(x=0, y=0)
         
-        
-        #Launch Button
-        self.game_launcher_button = customtkinter.CTkButton(self, text="Launch Game", font=("", 30),
-                                                fg_color="#951A02", hover_color="#FFC432", border_color="#EE6518",
-                                                border_width=2, width=150, height=50,
-                                                command=game_launcher.launch_game)
-        self.game_launcher_button.place(x=550, y=250)
-        
-        #Logs
-        self.logs_text = customtkinter.CTkTextbox(self, font=("", 12),
-                                                width=480, height=250, border_color="#000000", border_width=2)
-        self.logs_text.place(x=10, y=50)
-
 
 root_folder = application_path
-game_launcher_gui = GameLauncherGUI(None)
 settings = LauncherSettings()
-game_launcher = GameLauncher(root_folder, game_launcher_gui, settings)
-
-game_launcher_gui.game_launcher = game_launcher
-
-game_launcher_gui.create_widgets()
-game_launcher_gui.mainloop()
+app = QApplication(sys.argv)
+launcher = LauncherGUI()
+launcher.show()
+sys.exit(app.exec_())
