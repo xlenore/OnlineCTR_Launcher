@@ -13,14 +13,14 @@ import zipfile
 import time
 
 
-from PyQt5.QtCore import Qt, QPoint, QThreadPool, QRunnable
-from PyQt5.QtGui import QPixmap, QIcon, QTextCursor
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QLineEdit, QComboBox, QVBoxLayout, QWidget, QPushButton, QFileDialog, QTextEdit
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
 
 
 warnings.filterwarnings('ignore')
 
-LAUNCHER_VERSION = "1.3b1"
+LAUNCHER_VERSION = "1.3b2"
 
 URL_CLIENT = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/client.zip"
 URL_XDELTA_30 = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/ctr-u_Online30.xdelta"
@@ -125,11 +125,11 @@ class GameLauncher:
         # format 0 = normal; 1 = red
         # I hope someone will make this better
         if format == 0:
-            self.gui.logs_text.append(text.replace('\n', '<br>'))
+            self.gui.logs_text.append(text)
             self.gui.update()
             
         elif format == 1:
-            self.gui.logs_text.append("<div style=\"background-color: red; color:white\">{}</div>".format(text.replace('\n', '<br>')))
+            self.gui.logs_text.append("<div style=\"background-color: red; color:white\">{}</div>".format(text))
             self.gui.update()
         
         
@@ -158,9 +158,18 @@ class GameLauncher:
     
     def download_file(self, url, destination):
         try:
-            response = requests.get(url)
+            self.gui.progress_bar.show()
+            response = requests.get(url, stream=True)
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+        
             with open(destination, "wb") as file:
-                file.write(response.content)
+                for data in response.iter_content(chunk_size=1024):
+                    file.write(data)
+                    downloaded_size += len(data)
+                    progress = int(100 * downloaded_size / total_size)
+                    self.gui.progress_bar.setValue(progress)
+
         except Exception as e:
             print(e)
     
@@ -497,6 +506,7 @@ class LauncherGUI(QMainWindow):
         self.create_launch_button()
         self.create_settings_button()
         self.create_exit_button()
+        self.progress_bar = self.create_progress_bar()
 
     def create_main_window(self):
         window = MovableWindow()
@@ -549,6 +559,26 @@ class LauncherGUI(QMainWindow):
         button_exit.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
         button_exit.setCursor(Qt.PointingHandCursor)
         button_exit.clicked.connect(self.close)
+
+    def create_progress_bar(self):
+        progress_bar = QProgressBar(self.window)
+        progress_bar.setGeometry(315, 348, 450, 20)
+        progress_bar.setValue(0)
+        progress_bar.setStyleSheet(
+            """
+            QProgressBar {
+                border: 2px solid grey;
+                border-radius: 5px;
+                background-color: white;
+                text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #4CAF50;
+                    }""")
+        progress_bar.setRange(0, 100)
+        progress_bar.hide()
+        
+        return progress_bar
 
     def launch_game_in_thread(self):
         runnable = LauncherGameRunnable(GameLauncher(root_folder, self, settings))
