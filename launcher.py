@@ -9,10 +9,11 @@ import psutil
 import requests
 import shutil
 import zipfile
+#import debugpy
 
 
-from PyQt5.QtCore import Qt, QPoint, QSize, QThreadPool, QRunnable
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import Qt, QPoint, QThreadPool, QRunnable
+from PyQt5.QtGui import QPixmap, QIcon, QTextCursor
 from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QLineEdit, QComboBox, QVBoxLayout, QWidget, QPushButton, QFileDialog, QTextEdit
 
 
@@ -35,7 +36,7 @@ elif __file__:
 #Kill launcher.exe if already running
 current_pid = os.getpid()
 for proc in psutil.process_iter(['pid', 'name']):
-    if proc.info['name'] == 'launcher.exe' and proc.info['pid'] != current_pid:
+    if proc.info['name'] in ['launcher.exe', 'client.exe', 'duckstation-qt-x64-ReleaseLTCG.exe'] and proc.info['pid'] != current_pid:
         proc.kill()
 
 
@@ -102,7 +103,7 @@ class GameLauncher:
         #os.path.join(root_folder, "_ROM", "CTR.bin")
         self.patched60_file_path = os.path.join(root_folder, "_ROM", "CTR_Online60.bin")
         self.patched30_file_path = os.path.join(root_folder, "_ROM", "CTR_Online30.bin")
-        self.client_path = os.path.join(root_folder, "_CTRClient", "Client.exe")
+        self.client_path = os.path.join(root_folder, "_CTRClient", "client.exe")
         self.fast_boot = settings.fast_boot
         self.fullscreen = settings.fullscreen
         self.duckstation_path = settings.duckstation
@@ -187,8 +188,8 @@ class GameLauncher:
         self.download_file(URL_XDELTA_30, "_XDELTA/ctr-u_Online30.xdelta")
         self.print_logs("Downloading ctr-u_Online60.xdelta")
         self.download_file(URL_XDELTA_60, "_XDELTA/ctr-u_Online60.xdelta")
-        self.print_logs("Downloading Client.exe")
-        self.download_and_extract_zip(URL_CLIENT, "_CTRClient", "Client.exe")
+        self.print_logs("Downloading client.exe")
+        self.download_and_extract_zip(URL_CLIENT, "_CTRClient", "client.exe")
     
         try:
             with open("version", "w") as file:
@@ -213,10 +214,10 @@ class GameLauncher:
             local_version = self.get_local_version()
             version = self.get_current_patch()
             if version != local_version:
-                self.print_logs(f"Local version: {local_version}\nGitHub version: {version}")
+                self.print_logs(f"Local version: {local_version}\nOnlineCTR version: {version}")
                 return True, version
             else:
-                self.print_logs(f"Local version: {local_version}\nGitHub version: {version}")
+                self.print_logs(f"Local version: {local_version}\nOnlineCTR version: {version}")
                 return False, None
         except Exception as e:
             print(e)
@@ -226,7 +227,8 @@ class GameLauncher:
     def launch_duckstation(self):
         try:
             if os.path.exists(self.patched_file):
-                process = f'start "" {self.duckstation_path} {self.patched_file}{" -fullscreen" if self.fullscreen == "1" else ""}{" -fastboot" if self.fast_boot == "1" else ""}'
+                process = f'start "" "{self.duckstation_path}" {self.patched_file}{" -fullscreen" if self.fullscreen == "1" else ""}{" -fastboot" if self.fast_boot == "1" else ""}'
+                
                 subprocess.Popen(process, shell=True)
                 return True
             else:
@@ -259,7 +261,7 @@ class GameLauncher:
             self.print_logs("xdelta3.exe not found", 1)
             return False
         if not os.path.exists(self.client_path):
-            self.print_logs("Client.exe not found", 1)
+            self.print_logs("client.exe not found", 1)
             return False
         if not os.path.exists(self.duckstation_path):
             print(self.duckstation_path)
@@ -280,7 +282,6 @@ class GameLauncher:
             return
         
         is_update, version = self.check_for_updates()
-        print(is_update, version)
         if is_update:
             self.download_updated_files(version)
             self.patch_game()
@@ -299,6 +300,7 @@ class GameLauncher:
         
         #Launch CTRClient
         self.print_logs("Launching CTRClient...")
+        #self.launch_game_thread()
         threading.Thread(target=self.launch_game_thread).start()
     
     
@@ -316,14 +318,12 @@ class GameLauncher:
             process = subprocess.Popen(command2, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
             while True:
                 output = process.stdout.readline()
-                if output == b'' and process.poll() is not None:
-                    break
                 if output:
                     output = output.decode('utf-8', errors='replace').strip()
                     # Trying to make the logs look better ¯\_(ツ)_/¯
                     output = re.sub(r'[^a-zA-Z0-9: "().@]', '', output)
-                        
-                    self.gui.logs_text.append(output)
+                    if output.strip() != "":
+                        self.gui.logs_text.append(output)
         except Exception as e:
             self.print_logs("Error launching CTRClient")
             self.print_logs(str(e))
@@ -355,6 +355,7 @@ class SettingsWindow(MovableWindow):
         super().__init__()
         self.launcher_settings = launcher_settings
         self.setWindowTitle("CTR Launcher Settings")
+        self.setWindowIcon(QIcon('assets/icon.ico'))
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -487,6 +488,7 @@ class LauncherGUI(QMainWindow):
         window.setAttribute(Qt.WA_TranslucentBackground, True)
         window.setAttribute(Qt.WA_NoSystemBackground, True)
         window.setWindowFlags(Qt.FramelessWindowHint)
+        window.setWindowIcon(QIcon('assets/icon.ico'))
 
         label = QLabel(window)
         pixmap = QPixmap('assets/launcher.png')
@@ -511,19 +513,23 @@ class LauncherGUI(QMainWindow):
     def create_launch_button(self):
         button_launch = QPushButton(self.window)
         button_launch.setGeometry(50, 255, 190, 30)
+        button_launch.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        #debugpy.debug_this_thread()
         button_launch.clicked.connect(self.launch_game_in_thread)
 
     def create_settings_button(self):
         button_settings = QPushButton(self.window)
         button_settings.setGeometry(65, 300, 170, 30)
-
+        button_settings.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        
         launcher_settings = LauncherSettings()
         self.second_window = SettingsWindow(launcher_settings)
         button_settings.clicked.connect(self.second_window.show)
 
     def create_exit_button(self):
         button_exit = QPushButton(self.window)
-        button_exit.setGeometry(80, 345, 140, 30)
+        button_exit.setGeometry(80, 338, 140, 30)
+        button_exit.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
         button_exit.clicked.connect(self.close)
 
     def launch_game_in_thread(self):
@@ -535,7 +541,7 @@ class LauncherGUI(QMainWindow):
 
     def kill_process(self):
         for proc in psutil.process_iter(['pid', 'name']):
-            if proc.info['name'] in ['Client.exe', 'duckstation-qt-x64-ReleaseLTCG.exe']:
+            if proc.info['name'] in ['client.exe', 'duckstation-qt-x64-ReleaseLTCG.exe']:
                 proc.kill()
 
     def close(self):
