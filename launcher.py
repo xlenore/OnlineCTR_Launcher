@@ -10,6 +10,7 @@ import requests
 import shutil
 import zipfile
 #import debugpy
+import time
 
 
 from PyQt5.QtCore import Qt, QPoint, QThreadPool, QRunnable
@@ -19,7 +20,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QLin
 
 warnings.filterwarnings('ignore')
 
-LAUNCHER_VERSION = "1.3 WIP"
+LAUNCHER_VERSION = "1.3b1"
 
 URL_CLIENT = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/client.zip"
 URL_XDELTA_30 = "https://online-ctr.com/wp-content/uploads/onlinectr_patches/ctr-u_Online30.xdelta"
@@ -300,7 +301,6 @@ class GameLauncher:
         
         #Launch CTRClient
         self.print_logs("Launching CTRClient...")
-        #self.launch_game_thread()
         threading.Thread(target=self.launch_game_thread).start()
     
     
@@ -322,7 +322,15 @@ class GameLauncher:
                     output = output.decode('utf-8', errors='replace').strip()
                     # Trying to make the logs look better ¯\_(ツ)_/¯
                     output = re.sub(r'[^a-zA-Z0-9: "().@]', '', output)
-                    if output.strip() != "":
+                    
+                    if output.strip() == 'Enter Server IPV4 Address:':
+                        self.print_logs("Private lobbies are not supported", 1)
+                        self.print_logs("Exiting in 5 seconds...")
+                        time.sleep(5)
+                        LauncherGUI.kill_process(self)
+                        break
+                        
+                    elif output.strip() != '':
                         self.gui.logs_text.append(output)
         except Exception as e:
             self.print_logs("Error launching CTRClient")
