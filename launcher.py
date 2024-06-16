@@ -383,6 +383,7 @@ class SettingsWindow(MovableWindow):
         self.frame_rate_input = QComboBox()
         self.frame_rate_input.addItem("30fps")
         self.frame_rate_input.addItem("60fps")
+        self.frame_rate_input.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.frame_rate_label)
         layout.addWidget(self.frame_rate_input)
         if self.launcher_settings.get_frame_rate() == "0":
@@ -395,6 +396,7 @@ class SettingsWindow(MovableWindow):
         self.fast_boot_input = QComboBox()
         self.fast_boot_input.addItem("Disabled")
         self.fast_boot_input.addItem("Enabled")
+        self.fast_boot_input.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.fast_boot_label)
         layout.addWidget(self.fast_boot_input)
         if self.launcher_settings.get_fast_boot() == "0":
@@ -407,6 +409,7 @@ class SettingsWindow(MovableWindow):
         self.fullscreen_input = QComboBox()
         self.fullscreen_input.addItem("Disabled")
         self.fullscreen_input.addItem("Enabled")
+        self.fullscreen_input.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.fullscreen_label)
         layout.addWidget(self.fullscreen_input)
         if self.launcher_settings.get_fullscreen() == "0":
@@ -418,6 +421,7 @@ class SettingsWindow(MovableWindow):
         self.duckstation_label = QLabel("Duckstation Path:")
         self.duckstation_input = QLineEdit()
         self.duckstation_button = QPushButton("Browse for Duckstation")
+        self.duckstation_button.setCursor(Qt.PointingHandCursor)
         self.duckstation_button.clicked.connect(self.browse_duckstation)
         layout.addWidget(self.duckstation_label)
         layout.addWidget(self.duckstation_input)
@@ -429,6 +433,7 @@ class SettingsWindow(MovableWindow):
         self.game_rom_label = QLabel("Game ROM Path:")
         self.game_rom_input = QLineEdit()
         self.game_rom_button = QPushButton("Browse for CTR ROM")
+        self.game_rom_button.setCursor(Qt.PointingHandCursor)
         self.game_rom_button.clicked.connect(self.browse_game_rom)
         layout.addWidget(self.game_rom_label)
         layout.addWidget(self.game_rom_input)
@@ -439,6 +444,7 @@ class SettingsWindow(MovableWindow):
     def create_save_button(self, layout):
         layout.addSpacing(10)
         save_button = QPushButton("Save and Close")
+        save_button.setCursor(Qt.PointingHandCursor)
         save_button.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 10px 24px; text-align: center; text-decoration: none; font-size: 16px; margin: 4px 2px;")
         save_button.clicked.connect(self.save_settings)
         layout.addWidget(save_button)
@@ -451,6 +457,7 @@ class SettingsWindow(MovableWindow):
         self.launcher_settings.duckstation = self.duckstation_input.text()
         self.launcher_settings.game_rom = self.game_rom_input.text()
         self.launcher_settings.save_settings()
+        settings = LauncherSettings()
         self.close()
 
     def browse_duckstation(self):
@@ -514,6 +521,7 @@ class LauncherGUI(QMainWindow):
         button_launch = QPushButton(self.window)
         button_launch.setGeometry(50, 255, 190, 30)
         button_launch.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        button_launch.setCursor(Qt.PointingHandCursor)
         #debugpy.debug_this_thread()
         button_launch.clicked.connect(self.launch_game_in_thread)
 
@@ -521,6 +529,7 @@ class LauncherGUI(QMainWindow):
         button_settings = QPushButton(self.window)
         button_settings.setGeometry(65, 300, 170, 30)
         button_settings.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        button_settings.setCursor(Qt.PointingHandCursor)
         
         launcher_settings = LauncherSettings()
         self.second_window = SettingsWindow(launcher_settings)
@@ -530,6 +539,7 @@ class LauncherGUI(QMainWindow):
         button_exit = QPushButton(self.window)
         button_exit.setGeometry(80, 338, 140, 30)
         button_exit.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        button_exit.setCursor(Qt.PointingHandCursor)
         button_exit.clicked.connect(self.close)
 
     def launch_game_in_thread(self):
