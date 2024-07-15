@@ -497,6 +497,31 @@ class LauncherGameRunnable(QRunnable):
         self.game_launcher.launch_game()        
 
 
+class HoverButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+            }
+        """)
+        self.glow_enabled = False
+
+    def enterEvent(self, event):
+        if not self.graphicsEffect():
+            glow_effect = QGraphicsDropShadowEffect(self)
+            glow_effect.setColor(QColor(255, 255, 255)) 
+            glow_effect.setOffset(0, 0)
+            glow_effect.setBlurRadius(10)
+            self.setGraphicsEffect(glow_effect)
+        self.update()
+
+    def leaveEvent(self, event):
+        self.setGraphicsEffect(None)
+        self.update()
+        
 class LauncherGUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -536,17 +561,35 @@ class LauncherGUI(QMainWindow):
         return logs_textbox
 
     def create_launch_button(self):
-        button_launch = QPushButton(self.window)
-        button_launch.setGeometry(50, 255, 190, 30)
-        button_launch.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        start_path = os.path.join(script_dir, 'assets', 'START.png').replace(os.sep, '/')
+        button_launch = HoverButton(self.window)
+        button_launch.setGeometry(30, 253, 250, 40)
+        button_launch.setStyleSheet(f"""
+            HoverButton {{
+                border: none;
+                background-image: url({start_path});
+                background-repeat: no-repeat;
+                background-position: center;
+            }}
+        """)
         button_launch.setCursor(Qt.PointingHandCursor)
         #debugpy.debug_this_thread()
         button_launch.clicked.connect(self.launch_game_in_thread)
 
     def create_settings_button(self):
-        button_settings = QPushButton(self.window)
-        button_settings.setGeometry(65, 300, 170, 30)
-        button_settings.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        settings_path = os.path.join(script_dir, 'assets', 'OPTIONS.png').replace(os.sep, '/')
+        button_settings = HoverButton(self.window)
+        button_settings.setGeometry(68, 298, 170, 40)
+        button_settings.setStyleSheet(f"""
+            HoverButton {{
+                border: none;
+                background-image: url({settings_path});
+                background-repeat: no-repeat;
+                background-position: center;
+            }}
+        """)
         button_settings.setCursor(Qt.PointingHandCursor)
         
         launcher_settings = LauncherSettings()
@@ -554,9 +597,18 @@ class LauncherGUI(QMainWindow):
         button_settings.clicked.connect(self.second_window.show)
 
     def create_exit_button(self):
-        button_exit = QPushButton(self.window)
-        button_exit.setGeometry(80, 338, 140, 30)
-        button_exit.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        exit_path = os.path.join(script_dir, 'assets', 'EXIT.png').replace(os.sep, '/')
+        button_exit = HoverButton(self.window)
+        button_exit.setGeometry(85, 340, 140, 30)
+        button_exit.setStyleSheet(f"""
+            HoverButton {{
+                border: none;
+                background-image: url({exit_path});
+                background-repeat: no-repeat;
+                background-position: center;
+            }}
+        """)
         button_exit.setCursor(Qt.PointingHandCursor)
         button_exit.clicked.connect(self.close)
 
